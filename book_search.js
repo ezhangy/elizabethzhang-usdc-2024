@@ -13,18 +13,143 @@
  */
 
 /**
+ * An input object containing scanned content from multiple books.
+ * 
+ * @typedef {Book[]} ScannedTextObj
+*/
+
+/**
+ * An input object containing scanned content from multiple books.
+ * 
+ * @typedef {{
+*  "Title": string;
+*  "ISBN": string;
+*  "Content": ScannedLine[]
+* }} Book
+*/
+
+/**
+* A scanned line from a book
+* 
+* @typedef {{
+*      "Page": number;
+*      "Line": number;
+*      "Text": string;
+*  }} ScannedLine
+*/
+
+
+/**
+* A single search result.
+* 
+* @typedef {{
+*  "ISBN": string,
+*  "Page": number,
+*  "Line": number
+* }} SearchResult
+*/
+
+/**
+ * Checks that `scannedTextObj` has the expected JSON format.
+ * 
+ * If `scannedTextObj` does not have the expected format, the function 
+ * throws an error. Otherwise, the function returns the input object.
+ *  
+ * @param {JSON} scannedTextObj 
+ * @returns {ScannedTextObj}}
+ */
+function checkScannedTextObj(scannedTextObj) {
+    if (!Array.isArray(scannedTextObj)) {
+        throw Error("Invalid Argument: scannedTextObj must be an array")
+    }
+    for (const bookObj of scannedTextObj) {
+        const bookObjKeys = ["Title", "ISBN", "Content"]
+        for (const bookObjKey of bookObjKeys) {
+            if (!(bookObjKey in bookObj)) {
+                throw Error(`Invalid Argument: book objects in the scannedTextObj must contain a "${bookObjKey}" property`)
+            }
+        }
+
+        // check that "Content" property is an array with the proper objects
+        const lineObjs = bookObj["Content"]
+        if (!Array.isArray(lineObjs)) {
+            throw Error(`Invalid Argument: "Content" property of each book object must be an array`)
+        }
+        for (const lineObj of lineObjs) {
+            const lineObjKeys = ["Page", "Line", "Text"]
+            for (const lineObjKey of lineObjKeys) {
+                if (!(lineObjKey in lineObj)) {
+                    throw Error(`Invalid Argument: book objects in the scannedTextObj must contain a "${lineObjKey}" property`)
+                }
+            }
+        }
+    }
+    return scannedTextObj
+}
+
+/**
+ * Generates a regex for a search term. 
+ * 
+ * The regex is case-sensitive and matches on whole words. Word boundaries
+ * are obtained using the word boundary `\b` metacharacter.  
+ * 
+ * @param {string} searchTerm - The search term to generate the regex for.
+ * @returns {RegExp}
+ */
+function generateSearchMatcher(searchTerm) {
+    const words = searchTerm.trim().split(/\b/)
+    const matcher = new RegExp(words.map(word => `\\b${word}\\b`).join(""))
+    return matcher
+}
+
+
+/**
+ * Searches for matches in a {@linkcode Book}.
+ * 
+ * @param {RegExp} searchMatcher - The RegExp to match against the scanned
+ * line. 
+ * @param {Book} bookObj - The {@linkcode Book} object we're searching
+ * @returns {SearchResult[]} A list of {@linkcode SearchResult}. If there
+ * are multiple matches within a single line, only one result for that line
+ * will be returned.
+ */
+function findSearchTermInBook(searchMatcher, bookObj) {
+    /** @type {Set<string>} */
+    const stringifiedResultsSet = new Set()
+    for (const {Page, Line, Text} of bookObj["Content"]) {
+        if (Text.match(searchMatcher)) {
+            stringifiedResultsSet.add(JSON.stringify({
+                "ISBN": bookObj["ISBN"],
+                "Page": Page, 
+                "Line": Line
+            }))
+        }
+    }
+    /** @type {SearchResult[]} */
+    const parsedResults = [...stringifiedResultsSet].map(JSON.parse)
+    return parsedResults
+}
+
+
+/**
  * Searches for matches in scanned text.
  * @param {string} searchTerm - The word or term we're searching for. 
  * @param {JSON} scannedTextObj - A JSON object representing the scanned text.
  * @returns {JSON} - Search results.
  * */ 
  function findSearchTermInBooks(searchTerm, scannedTextObj) {
-    /** You will need to implement your search and 
-     * return the appropriate object here. */
+    const validScannedTextObj = checkScannedTextObj(scannedTextObj)
+
+    /** @type {SearchResult[]} */
+    let results = []
+    const matcher = generateSearchMatcher(searchTerm)
+    for (const bookObj of validScannedTextObj) {
+        results = results.concat(findSearchTermInBook(matcher, bookObj))
+    }
 
     var result = {
-        "SearchTerm": "",
-        "Results": []
+        "SearchTerm": searchTerm,
+        "Results": results
     };
     
     return result; 
