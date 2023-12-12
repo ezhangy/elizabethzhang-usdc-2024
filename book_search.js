@@ -112,8 +112,7 @@ function sortScannedLines(scannedLines) {
  * @returns {RegExp}
  */
 function generateSearchMatcher(searchTerm) {
-    const words = searchTerm.trim().split(/\b/)
-    const matcher = new RegExp(words.map(word => `\\b${word}\\b`).join(""))
+    const matcher = new RegExp(searchTerm.trim().replace(/\b/g, "\\b"))
     return matcher
 }
 
@@ -198,7 +197,7 @@ function processLinesForWordBreaks(bookObj) {
             const currLineWithoutHyphen = Text.slice(0, -1)
             const firstWordInNextLine = nextLine.Text.match(/^\b.+?\b/)
             newText = currLineWithoutHyphen + firstWordInNextLine
-            
+
             const nextLineWithoutFirstWord = nextLine.Text.match(/^\b.+?\b(.*)$/)[1];
             oldLines[index + 1] = {
                 ...nextLine, "Text": nextLineWithoutFirstWord
@@ -257,6 +256,7 @@ function findSearchTermInBook(searchMatcher, bookObj) {
     /** @type {SearchResult[]} */
     let results = []
     const matcher = generateSearchMatcher(searchTerm)
+
     for (const bookObj of validScannedTextObj) {
         results = results.concat(findSearchTermInBook(matcher, bookObj))
     }
@@ -306,6 +306,82 @@ const twentyLeaguesOut = {
     ]
 }
 
+const exampleValidInputObj = [
+    {
+        "Title": "Title 1",
+        "ISBN": "1",
+        "Content": [
+            {
+                "Page": 1,
+                "Line": 7,
+                "Text": "now simply went on by her own momentum. (method) The dark-"
+            },
+            {
+                "Page": 1,
+                "Line": 10,
+                "Text": "in Python, you may have a method __hash__"
+            },
+        ] 
+    },
+    {
+        "Title": "Title 2",
+        "ISBN": "2",
+        "Content": [
+            {
+                "Page": 2,
+                "Line": 1,
+                "Text": "this is a sentence—that contains an em dash—"
+            },
+            {
+                "Page": 2,
+                "Line": 5,
+                "Text": "er <-- should not be connected to hyphenated word in the book 3. floorboards are often made of wood."
+            },
+            {
+                "Page": 2,
+                "Line": 7,
+                "Text": "and winter is here. floor-"
+            },
+        ] 
+    },
+    {
+        "Title": "Title 3",
+        "ISBN": "3",
+        "Content": [
+            {
+                "Page": 2,
+                "Line": 7,
+                "Text": "boards creak and groan. Twenty-Three years ago"
+            },
+            {
+                "Page": 2,
+                "Line": 3,
+                "Text": "the dark room has a lamp which is a lamp that"
+            },
+            {
+                "Page": 2,
+                "Line": 4,
+                "Text": "glows dimly in the moon-"
+            },
+            {
+                "Page": 2,
+                "Line": 5,
+                "Text": "light of the cold win-"
+            },
+            {
+                "Page": 2,
+                "Line": 6,
+                "Text": "ter breeze. creak, creak. the floor-"
+            },
+            {
+                "Page": 20,
+                "Line": 1,
+                "Text": "a method to the madness here"
+            },
+        ]
+    }
+]
+
 /*
  _   _ _   _ ___ _____   _____ _____ ____ _____ ____  
 | | | | \ | |_ _|_   _| |_   _| ____/ ___|_   _/ ___| 
@@ -321,6 +397,25 @@ const twentyLeaguesOut = {
  * 
  * Please add your unit tests below.
  * */
+
+/**
+ * Checks whether two values of any type are equal to one another using 
+ * `JSON.stringify`.
+ * 
+ * @param {string} testName - The name of the test.
+ * @param {object} expected - The expected value to compare with the actual
+ * value.
+ * @param {object} actual - The actual value.
+ */
+function assertEquals(testName, expected, actual) {
+    if (JSON.stringify(expected) === JSON.stringify(actual)) {
+        console.log(`PASS: ${testName}`);
+    } else {
+        console.log(`FAIL: ${testName}`);
+        console.log("Expected:", expected);
+        console.log("Received:", actual);
+    }
+}
 
 /** We can check that, given a known input, we get a known output. */
 const test1result = findSearchTermInBooks("the", twentyLeaguesIn);
@@ -342,22 +437,399 @@ if (test2result.Results.length == 1) {
     console.log("Received:", test2result.Results.length);
 }
 
-const test3result = findSearchTermInBooks("darkness", twentyLeaguesIn); 
-const test3expected = {
-    "SearchTerm": "darkness",
-    "Results": [
-        {
-            "ISBN": "9780000528531",
-            "Page": 31,
-            "Line": 8
-        }
-    ]
-}
-if (JSON.stringify(test3result) === JSON.stringify(test3expected)) {
-    console.log("PASS: Test 3");
-} else {
-    console.log("FAIL: Test 3");
-    console.log("Expected:", test3expected);
-    console.log("Received:", test3result);
+/*-------POSITIVE TESTS-------*/
+console.log("POSITIVE TESTS")
+assertEquals("Multiple matches across different books",
+    {
+        "SearchTerm": "method",
+        "Results": [
+            {
+                "ISBN": "1",
+                "Page": 1,
+                "Line": 7
+            },
+            {
+                "ISBN": "1",
+                "Page": 1,
+                "Line": 10
+            },
+            {
+                "ISBN": "3",
+                "Page": 20,
+                "Line": 1
+            }
+        ]
+    }, 
+    findSearchTermInBooks("method", exampleValidInputObj)
+)
+
+assertEquals("Match multiple full words, considering punctuation",
+    {
+        "SearchTerm": "breeze. creak, creak.",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 6
+            }
+        ]
+    }, 
+    findSearchTermInBooks("breeze. creak, creak.", exampleValidInputObj)
+)
+
+assertEquals("Ignore whitespace at the start/end of the searchTerm",
+    {
+        "SearchTerm": " breeze. creak, creak.  ",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 6
+            }
+        ]
+    }, 
+    findSearchTermInBooks(" breeze. creak, creak.  ", exampleValidInputObj)
+)
+
+assertEquals("Match word at end of line",
+    {
+        "SearchTerm": "wood.",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 5
+            }
+        ]
+    }, 
+    findSearchTermInBooks("wood.", exampleValidInputObj)
+)
+
+
+assertEquals("Match hyphenated word break (no hyphens in search term)",
+    {
+        "SearchTerm": "winter",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 7
+            },
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 5
+            },
+        ]
+    }, 
+    findSearchTermInBooks("winter", exampleValidInputObj)
+)
+
+assertEquals(
+    "Match hyphenated word breaks even if scanned lines are out of order",
+    {
+        "SearchTerm": "floorboards",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 5,
+            },
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 6
+            },
+        ]
+    },
+    findSearchTermInBooks("floorboards", exampleValidInputObj)
+)
+
+assertEquals(
+    "Match on first half of hyphenated word break if it is never completed",
+    {
+        "SearchTerm": "floor",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 7,
+            },
+        ]
+    },
+    findSearchTermInBooks("floor", exampleValidInputObj)
+)
+
+assertEquals(
+    "Multiple matches in same line do not return duplicate results",
+    {
+        "SearchTerm": "lamp",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 3,
+            },
+        ]
+    },
+    findSearchTermInBooks("lamp", exampleValidInputObj)
+)
+
+assertEquals(
+    "Match searchTerm containing hyphens in the middle of the word.",
+    {
+        "SearchTerm": "Twenty-Three",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 7,
+            },
+        ]
+    },
+    findSearchTermInBooks("Twenty-Three", exampleValidInputObj)
+)
+
+assertEquals(
+    "Match searchTerm containing underscores.",
+    {
+        "SearchTerm": "__hash__",
+        "Results": [
+            {
+                "ISBN": "1",
+                "Page": 1,
+                "Line": 10,
+            },
+        ]
+    },
+    findSearchTermInBooks("__hash__", exampleValidInputObj)
+)
+
+assertEquals(
+    "Match searchTerm containing apostrophe.",
+    {
+        "SearchTerm": "Canadian's",
+        "Results": [
+            {
+                "ISBN": "9780000528531",
+                "Page": 31,
+                "Line": 9,
+            },
+        ]
+    },
+    findSearchTermInBooks("Canadian's", twentyLeaguesIn)
+)
+
+assertEquals(
+    'searchTerm "Canadian" matches "Canadian\'s" in scanned text',
+    {
+        "SearchTerm": "Canadian",
+        "Results": [
+            {
+                "ISBN": "9780000528531",
+                "Page": 31,
+                "Line": 9,
+            },
+        ]
+    },
+    findSearchTermInBooks("Canadian", twentyLeaguesIn)
+)
+
+assertEquals(
+    'searchTerm matches word containing trailing punctuation',
+    {
+        "SearchTerm": "profound",
+        "Results": [
+            {
+                "ISBN": "9780000528531",
+                "Page": 31,
+                "Line": 9
+            },
+        ]
+    },
+    findSearchTermInBooks("profound", twentyLeaguesIn)
+)
+
+assertEquals(
+    'searchTerm matches word containing leading punctuation',
+    {
+        "SearchTerm": "dash",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 1
+            },
+        ]
+    },
+    findSearchTermInBooks("dash", exampleValidInputObj)
+)
+
+assertEquals(
+    'Trailing punctuation in searchTerm matches correctly',
+    {
+        "SearchTerm": "profound;",
+        "Results": [
+            {
+                "ISBN": "9780000528531",
+                "Page": 31,
+                "Line": 9
+            },
+        ]
+    },
+    findSearchTermInBooks("profound;", twentyLeaguesIn)
+)
+
+/*-------CASE-SENSITIVE TESTS-------*/
+console.log("CASE-SENSITIVE TESTS")
+assertEquals(
+    'Matches are case-sensitive (first letter of word capitalized)',
+    {
+        "SearchTerm": "The",
+        "Results": [
+            {
+                "ISBN": "9780000528531",
+                "Page": 31,
+                "Line": 8
+            },
+        ]
+    },
+    findSearchTermInBooks("The", twentyLeaguesIn)
+)
+
+assertEquals(
+    'Matches are case-sensitive (capitalization within word)',
+    0,
+    findSearchTermInBooks("floOrBoArds", twentyLeaguesIn).Results.length
+)
+
+assertEquals(
+    'Matches are case-sensitive (capitalized hyphenated word)',
+    {
+        "SearchTerm": "Twenty-Three",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 7
+            },
+        ]
+    },
+    findSearchTermInBooks("Twenty-Three", exampleValidInputObj)
+)
+
+assertEquals(
+    'Matches are case-sensitive (multiple words)',
+    {
+        "SearchTerm": "Twenty-Three years",
+        "Results": [
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 7
+            },
+        ]
+    },
+    findSearchTermInBooks("Twenty-Three years", exampleValidInputObj)
+)
+
+/*-------NEGATIVE TESTS-------*/
+console.log("NEGATIVE TESTS")
+assertEquals(
+    "No books in input object.",
+    {
+        "SearchTerm": "the",
+        "Results": []
+    },
+    findSearchTermInBooks("the", [])
+)
+
+assertEquals(
+    "No lines in input object.",
+    {
+        "SearchTerm": "the",
+        "Results": []
+    },
+    findSearchTermInBooks("the", [{
+        "Title": "Twenty Thousand Leagues Under the Sea",
+        "ISBN": "9780000528531",
+        "Content": []
+    }])
+)
+
+assertEquals(
+    "searchTerm not present in scanned text",
+    {
+        "SearchTerm": "totality",
+        "Results": []
+    },
+    findSearchTermInBooks("totality", twentyLeaguesIn)
+)
+
+assertEquals(
+    "Does not return partial matches within word boundaries (single word in searchTerm).",
+    0,
+    findSearchTermInBooks("floor", twentyLeaguesIn).Results.length
+)
+
+
+assertEquals(
+    "Does not return partial matches within word boundaries (multiple words in searchTerm).",
+    0,
+    findSearchTermInBooks("breeze. creak, cre.", exampleValidInputObj).Results.length
+)
+
+assertEquals(
+    'Leading punctuation in searchTerm is considered',
+    0,
+    findSearchTermInBooks(";profound", twentyLeaguesIn).Results.length
+)
+
+assertEquals(
+    "Does not return word halves from a hyphenated line break (first half)",
+    0,
+    findSearchTermInBooks("dark", twentyLeaguesIn).Results.length
+)
+
+
+assertEquals(
+    "Word break does not match hyphenated version of broken word",
+    0,
+    findSearchTermInBooks("win-ter", exampleValidInputObj).Results.length
+)
+
+assertEquals(
+    "Does not return word halves from a hyphenated line break (second half)",
+    0,
+    findSearchTermInBooks("ness", twentyLeaguesIn).Results.length
+)
+
+assertEquals(
+    "Does not match different forms of the same word",
+    0,
+    findSearchTermInBooks("asking", twentyLeaguesIn).Results.length
+)
+
+assertEquals(
+    "Does not match close but inexact matches",
+    0,
+    findSearchTermInBooks("Teh", twentyLeaguesIn).Results.length
+)
+
+assertEquals(
+    "Does not match searchTerm that does not contain valid word boundaries",
+    0,
+    findSearchTermInBooks("<--", twentyLeaguesIn).Results.length
+)
+
+console.log("INPUT VALIDATION TESTS")
+try {
+    findSearchTermInBooks("the", {})
+} catch ({ message }) {
+    assertEquals(
+        "Invalid input object throws appropriate error",
+        message,
+        "Invalid Argument: scannedTextObj must be an array"
+    )
 }
 
