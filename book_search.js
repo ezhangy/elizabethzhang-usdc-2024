@@ -88,6 +88,21 @@ function checkScannedTextObj(scannedTextObj) {
 }
 
 /**
+ * 
+ * @param {ScannedLine[]} scannedLines 
+ * @returns {ScannedLine[]}
+ */
+function sortScannedLines(scannedLines) {
+    return [...scannedLines].sort((lineA, lineB) => {
+        if (lineA["Page"] !== lineB["Page"]) {
+            return lineA["Page"] - lineB["Page"]
+        } else { // if both lines are on the same page, then we compare lines
+            return lineA["Line"] - lineB["Line"]
+        }
+    })
+}
+
+/**
  * Generates a regex for a search term. 
  * 
  * The regex is case-sensitive and matches on whole words. Word boundaries
@@ -102,6 +117,103 @@ function generateSearchMatcher(searchTerm) {
     return matcher
 }
 
+/**
+ * Processes `ScannedLines` for word breaks by reconnecting words that 
+ * have been split across lines. 
+ * 
+ * The second half of the broken word is added to the end of the line
+ * containing the first half. The second half of the broken word is then 
+ * removed from the beginning of the next line. 
+ * 
+ * **Example**
+ * 
+ * The following lines: 
+ * ```
+ * [
+ *  {
+ *   "Page": 31,
+ *   "Line": 8, 
+ *   "Text": "now simply went on by her own momentum.  The dark-"
+ *  },
+ *  {
+ *  "Page": 31,
+ *  "Line": 9,
+ *  "Text": "ness was then profound; and however good the Canadian\'s"
+ *  },
+ * ]
+ * ```
+ * 
+ * Would be transformed into: 
+ * ```
+ * [
+ *  {
+ *   "Page": 31,
+ *   "Line": 8, 
+ *   "Text": "now simply went on by her own momentum.  The darkness"
+ *  },
+ *  {
+ *  "Page": 31,
+ *  "Line": 9,
+ *  "Text": " was then profound; and however good the Canadian\'s"
+ *  },
+ * ]
+ * ```
+ * 
+ * @param {Book} bookObj - The {@linkcode Book} object to process the lines for.
+ * @returns {ScannedLine[]} A list of processed {@linkcode ScannedLine}
+ */
+function processLinesForWordBreaks(bookObj) {
+    /** @type {ScannedLine[]} */
+    const newLines = []
+
+    // sort so lines containing words breaks will be next to each other
+    const oldLines = sortScannedLines(bookObj["Content"])
+    for (const [index, { Page, Line, Text }] of oldLines.entries()) {
+        /** @type {ScannedLine | undefined} */
+        const nextLine = oldLines[index + 1]
+
+        // is the next line in the book present?
+        const isConsecutiveLinePresent = (
+            // this isn't the last scannedLine
+            nextLine !== undefined
+                // the next scannedLine is on the same page
+                && Page === oldLines[index + 1]["Page"] 
+                // the next scannedLine is the next consecutive line number
+                && Line + 1 === oldLines[index + 1]["Line"] 
+        ) 
+        
+        const isValidWordBreakPresent = (
+            Text[Text.length - 1] === "-"
+            && isConsecutiveLinePresent
+            // the first word in the next line
+            && nextLine.Text.match(/^\b.+?\b/) !== null
+        )
+
+        /** 
+         * The newText to assign to the line
+         * @type {string} 
+         * */
+        let newText;
+        if (isValidWordBreakPresent) {
+            const currLineWithoutHyphen = Text.slice(0, -1)
+            const firstWordInNextLine = nextLine.Text.match(/^\b.+?\b/)
+            newText = currLineWithoutHyphen + firstWordInNextLine
+            
+            const nextLineWithoutFirstWord = nextLine.Text.match(/^\b.+?\b(.*)$/)[1];
+            oldLines[index + 1] = {
+                ...nextLine, "Text": nextLineWithoutFirstWord
+            }
+        } else {
+            newText = Text
+        }
+        newLines.push({
+            "Page": Page,
+            "Line": Line,
+            "Text": newText
+        })
+    }
+    return newLines
+}
 
 /**
  * Searches for matches in a {@linkcode Book}.
@@ -116,7 +228,9 @@ function generateSearchMatcher(searchTerm) {
 function findSearchTermInBook(searchMatcher, bookObj) {
     /** @type {Set<string>} */
     const stringifiedResultsSet = new Set()
-    for (const {Page, Line, Text} of bookObj["Content"]) {
+    const processedLines = processLinesForWordBreaks(bookObj)
+
+    for (const {Page, Line, Text} of processedLines) {
         if (Text.match(searchMatcher)) {
             stringifiedResultsSet.add(JSON.stringify({
                 "ISBN": bookObj["ISBN"],
@@ -227,3 +341,23 @@ if (test2result.Results.length == 1) {
     console.log("Expected:", twentyLeaguesOut.Results.length);
     console.log("Received:", test2result.Results.length);
 }
+
+const test3result = findSearchTermInBooks("darkness", twentyLeaguesIn); 
+const test3expected = {
+    "SearchTerm": "darkness",
+    "Results": [
+        {
+            "ISBN": "9780000528531",
+            "Page": 31,
+            "Line": 8
+        }
+    ]
+}
+if (JSON.stringify(test3result) === JSON.stringify(test3expected)) {
+    console.log("PASS: Test 3");
+} else {
+    console.log("FAIL: Test 3");
+    console.log("Expected:", test3expected);
+    console.log("Received:", test3result);
+}
+
