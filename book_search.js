@@ -162,6 +162,8 @@ function generateSearchMatcher(searchTerm) {
  * @returns {ScannedLine[]} A list of processed {@linkcode ScannedLine}
  */
 function processLinesForWordBreaks(bookObj) {
+    const cleanLine = (text) => text.replace(/\t|\n|\r/g, " ").trim()
+
     /** @type {ScannedLine[]} */
     const newLines = []
 
@@ -170,6 +172,12 @@ function processLinesForWordBreaks(bookObj) {
     for (const [index, { Page, Line, Text }] of oldLines.entries()) {
         /** @type {ScannedLine | undefined} */
         const nextLine = oldLines[index + 1]
+
+         /** 
+         * The newText to assign to the line
+         * @type {string} 
+         * */
+        let newText = cleanLine(Text)
 
         // is the next line in the book present?
         const isConsecutiveLinePresent = (
@@ -180,31 +188,32 @@ function processLinesForWordBreaks(bookObj) {
                 // the next scannedLine is the next consecutive line number
                 && Line + 1 === oldLines[index + 1]["Line"] 
         ) 
-        
-        const isValidWordBreakPresent = (
-            Text[Text.length - 1] === "-"
-            && isConsecutiveLinePresent
-            // the first word in the next line
-            && nextLine.Text.match(/^\b.+?\b/) !== null
-        )
 
-        /** 
-         * The newText to assign to the line
-         * @type {string} 
-         * */
-        let newText;
-        if (isValidWordBreakPresent) {
-            const currLineWithoutHyphen = Text.slice(0, -1)
-            const firstWordInNextLine = nextLine.Text.match(/^\b.+?\b/)
-            newText = currLineWithoutHyphen + firstWordInNextLine
-
-            const nextLineWithoutFirstWord = nextLine.Text.match(/^\b.+?\b(.*)$/)[1];
-            oldLines[index + 1] = {
-                ...nextLine, "Text": nextLineWithoutFirstWord
+        if (isConsecutiveLinePresent) {
+            const nextLineText = cleanLine(nextLine.Text)     
+            const isValidWordBreakPresent = (
+                // the last word in the line ends with a hyphen
+                newText.match(/^.*(\b.+?\b)-$/) !== null
+                && isConsecutiveLinePresent
+                // the first word in the next line
+                && nextLineText.match(/^\b.+?\b/) !== null
+            )
+            if (isValidWordBreakPresent) {
+                const [currLineMatch, currLineWithoutLastWord, lastWordInCurrLine] = newText.match(/(^.*)\b(.+?)\b-$/)
+    
+                const [nextLineMatch, firstWordInNextLine, nextLineWithoutFirstWord] = nextLineText.match(/^\b(.+?)\b(.*)$/)
+    
+                // e.g. "darkness" = "dark" + "ness"
+                const unifiedWord = lastWordInCurrLine + firstWordInNextLine
+    
+                newText = currLineWithoutLastWord + unifiedWord
+    
+                oldLines[index + 1] = {
+                    ...nextLine, "Text": unifiedWord + nextLineWithoutFirstWord
+                }
             }
-        } else {
-            newText = Text
         }
+        
         newLines.push({
             "Page": Page,
             "Line": Line,
@@ -417,6 +426,7 @@ function assertEquals(testName, expected, actual) {
     }
 }
 
+
 /** We can check that, given a known input, we get a known output. */
 const test1result = findSearchTermInBooks("the", twentyLeaguesIn);
 if (JSON.stringify(twentyLeaguesOut) === JSON.stringify(test1result)) {
@@ -520,6 +530,11 @@ assertEquals("Match hyphenated word break (no hyphens in search term)",
                 "Page": 2,
                 "Line": 5
             },
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 6
+            },
         ]
     }, 
     findSearchTermInBooks("winter", exampleValidInputObj)
@@ -538,7 +553,12 @@ assertEquals(
             {
                 "ISBN": "3",
                 "Page": 2,
-                "Line": 6
+                "Line": 6,
+            },
+            {
+                "ISBN": "3",
+                "Page": 2,
+                "Line": 7
             },
         ]
     },
