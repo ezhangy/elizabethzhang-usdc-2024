@@ -162,6 +162,14 @@ function generateSearchMatcher(searchTerm) {
  * @returns {ScannedLine[]} A list of processed {@linkcode ScannedLine}
  */
 function processLinesForWordBreaks(bookObj) {
+    /**
+     * Processes the text in a line. 
+     * 
+     * Trims the line and replaces newlines, tabs, and carriage returns with 
+     * spaces so regexes used by processLinesForWordBreaks will match properly.
+     * @param {string} text - The string to clean.
+     * @returns {string} The cleaned string.
+     */
     const cleanLine = (text) => text.replace(/\t|\n|\r/g, " ").trim()
 
     /** @type {ScannedLine[]} */
@@ -700,6 +708,21 @@ assertEquals(
     findSearchTermInBooks("profound;", twentyLeaguesIn)
 )
 
+assertEquals(
+    "Matches searchTerm of non-alphanumeric characters",
+    {
+        "SearchTerm": "<--",
+        "Results": [
+            {
+                "ISBN": "2",
+                "Page": 2,
+                "Line": 5
+            },
+        ]
+    },
+    findSearchTermInBooks("<--", exampleValidInputObj)
+)
+
 /*-------CASE-SENSITIVE TESTS-------*/
 console.log("CASE-SENSITIVE TESTS")
 assertEquals(
@@ -752,6 +775,8 @@ assertEquals(
     },
     findSearchTermInBooks("Twenty-Three years", exampleValidInputObj)
 )
+
+
 
 /*-------NEGATIVE TESTS-------*/
 console.log("NEGATIVE TESTS")
@@ -834,12 +859,6 @@ assertEquals(
     "Does not match close but inexact matches",
     0,
     findSearchTermInBooks("Teh", twentyLeaguesIn).Results.length
-)
-
-assertEquals(
-    "Does not match searchTerm that does not contain valid word boundaries",
-    0,
-    findSearchTermInBooks("<--", twentyLeaguesIn).Results.length
 )
 
 console.log("INPUT VALIDATION TESTS")
